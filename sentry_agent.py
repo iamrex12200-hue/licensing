@@ -181,7 +181,7 @@ def ensure_credentials(endpoint, cfg_dir, max_retries=5, backoff_base=2.0,
               "activation first or place a key file in the config dir.")
         return None, None
     key = key_path.read_text(encoding="utf-8").strip()
-    hwid = get_hardware_id()
+    hwid = get_device_id(cfg_dir)
     try:
         status, _, body = request_retry(
             "POST", f"{endpoint}/api/v1/activate",
@@ -321,6 +321,16 @@ def read_user_id(cfg_dir):
     return ""
 
 
+def get_device_id(cfg_dir):
+    """Device identifier used for whitelisting: game user ID if set, else the
+    machine hash. The game user ID is hashed to the same 64-hex form the server
+    expects (normalize_hwid) so activate/register/ingest all line up."""
+    user_id = read_user_id(cfg_dir)
+    if user_id:
+        return hashlib.sha256(user_id.encode()).hexdigest()
+    return get_hardware_id()
+
+
 def run_cycle(endpoint, cfg_dir, max_retries=5, backoff_base=2.0,
               backoff_cap=60.0, jitter=True):
     """One register + ingest pass. Returns (exit_code, retry_after_seconds)."""
@@ -333,6 +343,8 @@ def run_cycle(endpoint, cfg_dir, max_retries=5, backoff_base=2.0,
                "Content-Type": "application/json"}
     stats = collect_stats()
     user_id = read_user_id(cfg_dir)
+    if not user_id and hwid != get_hardware_id():
+        user_id = hwid
 
     status, _, body = request_retry(
         "POST", f"{endpoint}/api/v1/sentry/devices", headers,

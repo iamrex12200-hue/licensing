@@ -373,6 +373,7 @@ namespace LicenseManagerApp
                 ? File.ReadAllText(_userIdFile).Trim() : "";
 
             BuildUi();
+            _client.SetDeviceId(DeviceId);
             _countdownTimer.Interval = 500;
             _countdownTimer.Tick += OnCountdownTick;
             _autoRefreshTimer.Interval = 5 * 60 * 1000;
@@ -479,6 +480,7 @@ namespace LicenseManagerApp
             if (id == _userId) return;
             _userId = id;
             File.WriteAllText(_userIdFile, id);
+            _client.SetDeviceId(DeviceId);
             UpdateDeviceLabel();
         }
 

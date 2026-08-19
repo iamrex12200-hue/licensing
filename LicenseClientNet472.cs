@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -117,7 +118,7 @@ namespace LicenseClient
         private readonly HttpClient _http;
 
         public string Token { get; private set; }
-        public string DeviceHwid { get; }
+        public string DeviceHwid { get; private set; }
 
         public LicenseClient(string baseUrl, string adminKey = null)
         {
@@ -138,6 +139,24 @@ namespace LicenseClient
         public void SetToken(string token) => Token = token;
 
         public void ClearToken() => Token = null;
+
+        public void SetDeviceId(string deviceId)
+        {
+            var id = (deviceId ?? "").Trim().ToLowerInvariant();
+            if (id.Length == 64 && id.All(c => (c >= '0' && c <= '9')
+                                               || (c >= 'a' && c <= 'f')))
+            {
+                DeviceHwid = id;
+                return;
+            }
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(id));
+                var hex = new StringBuilder(hash.Length * 2);
+                foreach (var b in hash) hex.Append(b.ToString("x2"));
+                DeviceHwid = hex.ToString();
+            }
+        }
 
         private async Task<T> SendAsync<T>(HttpMethod method, string path,
                                            object body) where T : ApiResponseBase
