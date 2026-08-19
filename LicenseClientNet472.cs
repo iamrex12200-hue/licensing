@@ -127,7 +127,7 @@ namespace LicenseClient
             _http = new HttpClient
             {
                 BaseAddress = new Uri(baseUrl),
-                Timeout = TimeSpan.FromSeconds(10)
+                Timeout = TimeSpan.FromSeconds(20)
             };
             if (!string.IsNullOrEmpty(adminKey))
             {
@@ -161,39 +161,62 @@ namespace LicenseClient
         private async Task<T> SendAsync<T>(HttpMethod method, string path,
                                            object body) where T : ApiResponseBase
         {
-            using (var req = new HttpRequestMessage(method, path))
-            {
-                if (body != null)
-                {
-                    req.Content = new StringContent(JsonConvert.SerializeObject(body),
-                        Encoding.UTF8, "application/json");
-                }
-                if (!string.IsNullOrEmpty(Token))
-                {
-                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
-                }
-                req.Headers.Add("X-Device-Hwid", DeviceHwid);
+            const int maxAttempts = 4;
+            int[] backoffMs = { 3000, 5000, 8000 };
+            Exception lastExc = null;
 
-                HttpResponseMessage resp;
-                try
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                if (attempt > 1) await Task.Delay(backoffMs[attempt - 2]);
+
+                using (var req = new HttpRequestMessage(method, path))
                 {
-                    resp = await _http.SendAsync(req);
+                    if (body != null)
+                    {
+                        req.Content = new StringContent(JsonConvert.SerializeObject(body),
+                            Encoding.UTF8, "application/json");
+                    }
+                    if (!string.IsNullOrEmpty(Token))
+                    {
+                        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+                    }
+                    req.Headers.Add("X-Device-Hwid", DeviceHwid);
+
+                    HttpResponseMessage resp;
+                    try
+                    {
+                        resp = await _http.SendAsync(req);
+                    }
+                    catch (HttpRequestException exc)
+                    {
+                        lastExc = new LicenseNetworkException("network error: " + exc.Message, exc);
+                        continue;
+                    }
+                    catch (TaskCanceledException exc)
+                    {
+                        lastExc = new LicenseNetworkException("request timed out", exc);
+                        continue;
+                    }
+
+                    if ((int)resp.StatusCode == 502 || (int)resp.StatusCode == 503
+                        || (int)resp.StatusCode == 504 || (int)resp.StatusCode == 520)
+                    {
+                        resp.Dispose();
+                        if (attempt < maxAttempts) continue;
+                        throw new LicenseNetworkException(
+                            "server temporarily unavailable (HTTP " + (int)resp.StatusCode + ")");
+                    }
+
+                    var text = await resp.Content.ReadAsStringAsync();
+                    var result = JsonConvert.DeserializeObject<T>(text)
+                                 ?? Activator.CreateInstance<T>();
+                    result.StatusCode = (int)resp.StatusCode;
+                    result.RetryAfterSeconds = (int?)resp.Headers.RetryAfter?.Delta?.TotalSeconds;
+                    return result;
                 }
-                catch (HttpRequestException exc)
-                {
-                    throw new LicenseNetworkException("network error: " + exc.Message, exc);
-                }
-                catch (TaskCanceledException exc)
-                {
-                    throw new LicenseNetworkException("request timed out", exc);
-                }
-                var text = await resp.Content.ReadAsStringAsync();
-                var result = JsonConvert.DeserializeObject<T>(text)
-                             ?? Activator.CreateInstance<T>();
-                result.StatusCode = (int)resp.StatusCode;
-                result.RetryAfterSeconds = (int?)resp.Headers.RetryAfter?.Delta?.TotalSeconds;
-                return result;
             }
+
+            throw lastExc ?? new LicenseNetworkException("request failed");
         }
 
         public Task<T> GetJsonAsync<T>(string path) where T : ApiResponseBase

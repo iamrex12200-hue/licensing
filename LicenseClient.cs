@@ -71,41 +71,72 @@ namespace LicenseClient
             _http = new HttpClient
             {
                 BaseAddress = new Uri(baseUrl),
-                Timeout = TimeSpan.FromSeconds(10)
+                Timeout = TimeSpan.FromSeconds(20)
             };
+        }
+
+        private async Task<HttpResponseMessage> RetryAsync(
+            Func<Task<HttpResponseMessage>> send)
+        {
+            const int maxAttempts = 4;
+            int[] backoffMs = { 3000, 5000, 8000 };
+            Exception lastExc = null;
+
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                if (attempt > 1) await Task.Delay(backoffMs[attempt - 2]);
+                HttpResponseMessage resp;
+                try { resp = await send(); }
+                catch (HttpRequestException exc) { lastExc = exc; continue; }
+                catch (TaskCanceledException exc) { lastExc = exc; continue; }
+
+                int code = (int)resp.StatusCode;
+                if (code == 502 || code == 503 || code == 504 || code == 520)
+                {
+                    resp.Dispose();
+                    if (attempt < maxAttempts) continue;
+                    throw new HttpRequestException(
+                        "server temporarily unavailable (HTTP " + code + ")");
+                }
+                return resp;
+            }
+            throw lastExc ?? new HttpRequestException("request failed");
         }
 
         public async Task<ActivationResponse> ActivateAsync(string licenseKey, string hwidHash)
         {
             var body = JsonContent.Create(new { key = licenseKey, hwid = hwidHash });
-            var resp = await _http.PostAsync("/api/v1/activate", body);
+            var resp = await RetryAsync(() => _http.PostAsync("/api/v1/activate", body));
             return await resp.Content.ReadFromJsonAsync<ActivationResponse>();
         }
 
         public async Task<ActivationResponse> RegisterDeviceAsync(string token, string hwidHash,
                                                                   string hostname, string userId)
         {
-            using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/sentry/devices")
+            return await RetryAsync(async () =>
             {
-                Content = JsonContent.Create(new { hostname = hostname, user_id = userId })
-            };
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            req.Headers.Add("X-Device-Hwid", hwidHash);
-            var resp = await _http.SendAsync(req);
-            return await resp.Content.ReadFromJsonAsync<ActivationResponse>();
+                using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/sentry/devices")
+                {
+                    Content = JsonContent.Create(new { hostname = hostname, user_id = userId })
+                };
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                req.Headers.Add("X-Device-Hwid", hwidHash);
+                return await _http.SendAsync(req);
+            }).ContinueWith(t => t.Result.Content.ReadFromJsonAsync<ActivationResponse>())
+              .Unwrap();
         }
 
         public async Task<ValidationResponse> ValidateAsync(string token, string hwidHash)
         {
             var body = JsonContent.Create(new { token = token, hwid = hwidHash });
-            var resp = await _http.PostAsync("/api/v1/validate", body);
+            var resp = await RetryAsync(() => _http.PostAsync("/api/v1/validate", body));
             return await resp.Content.ReadFromJsonAsync<ValidationResponse>();
         }
 
         public async Task<ActivationResponse> DeactivateAsync(string licenseKey, string hwidHash)
         {
             var body = JsonContent.Create(new { key = licenseKey, hwid = hwidHash });
-            var resp = await _http.PostAsync("/api/v1/deactivate", body);
+            var resp = await RetryAsync(() => _http.PostAsync("/api/v1/deactivate", body));
             return await resp.Content.ReadFromJsonAsync<ActivationResponse>();
         }
 
