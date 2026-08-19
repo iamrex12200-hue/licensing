@@ -204,7 +204,7 @@ namespace LicenseClient
                         resp.Dispose();
                         if (attempt < maxAttempts) continue;
                         throw new LicenseNetworkException(
-                            "server temporarily unavailable (HTTP " + (int)resp.StatusCode + ")");
+                            "server temporarily unavailable (HTTP " + (int)resp.StatusCode + ")", lastExc);
                     }
 
                     var text = await resp.Content.ReadAsStringAsync();
@@ -216,7 +216,7 @@ namespace LicenseClient
                 }
             }
 
-            throw lastExc ?? new LicenseNetworkException("request failed");
+            throw lastExc ?? new LicenseNetworkException("request failed", null);
         }
 
         public Task<T> GetJsonAsync<T>(string path) where T : ApiResponseBase
