@@ -1,0 +1,39 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / VS Code
+.idea/
+.vscode/
+*.swp
+
+# Test results
+TestResults/
+*.trx
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Secrets & local databases
+*.db
+*.db-wal
+*.db-shm
+*.pem
+.env
+__pycache__/
+cli_test.db
+mig.db

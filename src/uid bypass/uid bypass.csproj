@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>uid bypass</AssemblyName>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <LangVersion>11.0</LangVersion>
+    <PlatformTarget>x86</PlatformTarget>
+    <ApplicationIcon>App.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="uid_bypass.Bypass.UIDBypassDll.dll" />
+    <None Remove="uid_bypass.Bypass.UID_BYPASS.exe" />
+    <EmbeddedResource Include="uid_bypass.Bypass.UIDBypassDll.dll" LogicalName="uid_bypass.Bypass.UIDBypassDll.dll" />
+    <EmbeddedResource Include="uid_bypass.Bypass.UID_BYPASS.exe" LogicalName="uid_bypass.Bypass.UID_BYPASS.exe" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,19 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.cs]
+dotnet_sort_system_directives_first = true
+csharp_style_namespace_declarations = file_scoped:error
+csharp_style_var_when_type_is_apparent = true
+csharp_style_expression_bodied_methods = when_on_single_line
+dotnet_diagnostic.CA1416.severity = warning
+
+[*.{sln,slnx}]
+indent_style = tab

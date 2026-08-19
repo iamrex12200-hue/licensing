@@ -1,0 +1,34 @@
+services:
+  license:
+    build: .
+    restart: unless-stopped
+    environment:
+      LIC_ADMIN_KEY: ${LIC_ADMIN_KEY:?set in .env}
+      LIC_HMAC_SECRET: ${LIC_HMAC_SECRET:?set in .env}
+      LIC_DB_PATH: /app/data/licenses.db
+      LIC_RATE_ACTIVATE: 5
+      LIC_RATE_VALIDATE: 30
+      LIC_RATE_ADMIN: 10
+      LIC_TRUST_XFF: "1"
+    volumes:
+      - lic-data:/app/data
+    expose:
+      - 8000
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - license
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  lic-data:
+  caddy-data:
+  caddy-config:

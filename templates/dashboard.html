@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Device Sentinel Dashboard</title>
+<script src="/static/htmx.min.js"></script>
+<script src="/static/mustache.min.js"></script>
+<script src="/static/chart.umd.min.js"></script>
+<script src="/static/sentry-ext.js"></script>
+<style>
+  :root { --bg:#0f1420; --panel:#171e2e; --line:#27324a; --txt:#e6ecf5;
+          --dim:#8fa0bd; --acc:#4f8cff; --ok:#35c98e; --warn:#ffb454; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:14px/1.5 system-ui, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:14px 20px;
+           border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; letter-spacing:.3px; }
+  .spacer { flex:1; }
+  .badge { border:1px solid var(--line); border-radius:999px; padding:2px 12px;
+           font-size:12px; color:var(--dim); }
+  .badge.pro { border-color:#8b5cf6; color:#c4b5fd; }
+  .badge.basic { border-color:var(--line); color:var(--dim); }
+  .status-dot { display:inline-block; width:8px; height:8px; border-radius:50%;
+                background:var(--dim); margin-right:6px; }
+  .status-dot.online { background:var(--ok); }
+  .status-dot.stale { background:var(--warn); }
+  main { padding:20px; max-width:1200px; margin:0 auto; }
+  section { background:var(--panel); border:1px solid var(--line);
+            border-radius:10px; padding:16px; margin-bottom:18px; }
+  h2 { font-size:14px; margin:0 0 12px; color:var(--dim); text-transform:uppercase;
+       letter-spacing:1px; }
+  input, select, button { background:#0d1220; color:var(--txt);
+    border:1px solid var(--line); border-radius:6px; padding:7px 10px;
+    font:inherit; }
+  input, select { width:100%; }
+  button { cursor:pointer; border-color:var(--acc); color:var(--acc); }
+  button.primary { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .grid { display:grid; gap:12px; }
+  .cards { grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); }
+  .card { background:#0d1220; border:1px solid var(--line); border-radius:8px;
+          padding:12px; }
+  .card .host { font-weight:600; }
+  .card .meta { color:var(--dim); font-size:12px; margin-top:6px;
+                word-break:break-all; }
+  .charts { grid-template-columns:1fr 1fr; }
+  .chart-box { position:relative; min-height:260px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line);
+           vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:12px;
+       text-transform:uppercase; letter-spacing:.5px; }
+  td.del { width:70px; }
+  .form-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+              gap:10px; margin-bottom:10px; align-items:end; }
+  .hint { color:var(--dim); font-size:12px; }
+  .err { color:#ff6b6b; }
+  a.del { color:#ff6b6b; cursor:pointer; text-decoration:none; }
+  @media (max-width: 900px) { .charts { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Device Sentinel</h1>
+  <span id="tier-badge" class="badge">no session</span>
+  <span id="window-info" class="hint"></span>
+  <span class="spacer"></span>
+  <input id="token-input" type="password" placeholder="token" style="width:340px"
+         title="Paste the agent's token.txt (or activation token)">
+  <input id="hwid-input" placeholder="device hwid (hwid.txt)" style="width:300px">
+  <button class="primary" onclick="connect()">Connect</button>
+  <button onclick="disconnect()">Disconnect</button>
+</header>
+<main>
+  <section id="connect-banner" class="hint" hidden>
+    Enter a token + device hwid above and click Connect. The token must belong
+    to a license whose device is bound to the given hwid.
+  </section>
+
+  <section>
+    <h2>Devices</h2>
+    <div id="device-cards" class="grid cards"
+         hx-ext="jsonrender" hx-render="#deviceCardsTpl"
+         hx-get="/api/v1/sentry/dashboard"
+         hx-trigger="load, every 15s" hx-swap="innerHTML">
+      <span class="hint">waiting for session…</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>CPU / RAM (last window)</h2>
+    <div class="grid charts">
+      <div class="chart-box"><canvas id="cpu-chart"></canvas></div>
+      <div class="chart-box"><canvas id="ram-chart"></canvas></div>
+    </div>
+  </section>
+
+  <section id="alerts-panel" hidden>
+    <h2>Alert Rules</h2>
+    <form hx-post="/api/v1/sentry/alerts" hx-swap="none"
+          hx-on::after-request="onMutate()">
+      <div class="form-row">
+        <div><label class="hint">Metric</label>
+          <select name="metric">
+            <option value="cpu_usage">CPU %</option>
+            <option value="ram_usage">RAM %</option>
+            <option value="disk_usage">Disk %</option>
+            <option value="uptime_seconds">Uptime s (lt = reboot)</option>
+          </select></div>
+        <div><label class="hint">Operator</label>
+          <select name="operator"><option value="gt">&gt;</option>
+            <option value="lt">&lt;</option></select></div>
+        <div><label class="hint">Threshold</label>
+          <input name="threshold" type="number" step="any" required></div>
+        <div><label class="hint">Cooldown (min)</label>
+          <input name="cooldown_minutes" type="number" value="10" min="0"></div>
+        <div><label class="hint">Webhook URL</label>
+          <input name="webhook_url" placeholder="https://…"></div>
+        <div><label class="hint">Email</label>
+          <input name="email_to" placeholder="ops@example.com"></div>
+        <div><button class="primary" type="submit">Add rule</button></div>
+      </div>
+    </form>
+    <table>
+      <thead><tr><th>Metric</th><th>Op</th><th>Threshold</th><th>Cooldown</th>
+        <th>Webhook</th><th>Email</th><th>On</th><th></th></tr></thead>
+      <tbody id="rules-table"
+             hx-ext="jsonrender" hx-render="#rulesTpl"
+             hx-get="/api/v1/sentry/alerts"
+             hx-trigger="load, every 30s, rules-changed from:body"
+             hx-swap="innerHTML"></tbody>
+    </table>
+
+    <h2 style="margin-top:16px">Recent Events</h2>
+    <table>
+      <thead><tr><th>Time</th><th>Host</th><th>Metric</th><th>Threshold</th>
+        <th>Observed</th><th>Dispatch</th></tr></thead>
+      <tbody id="events-table"
+             hx-ext="jsonrender" hx-render="#eventsTpl"
+             hx-get="/api/v1/sentry/alerts/events?limit=20"
+             hx-trigger="load, every 60s, rules-changed from:body"
+             hx-swap="innerHTML"></tbody>
+    </table>
+  </section>
+</main>
+
+<template id="deviceCardsTpl">{% raw %}
+  {{#devices}}
+  <div class="card">
+    <div class="host"><span class="status-dot online"></span>{{hostname}}</div>
+    <div class="meta">hwid {{hwid_hash}}<br>
+      registered {{registered_at}} · last seen {{last_seen}}</div>
+  </div>
+  {{/devices}}
+  {{^devices}}<div class="hint">no devices bound to this license</div>{{/devices}}
+</template>{% endraw %}
+
+<template id="rulesTpl">{% raw %}
+  {{#rules}}
+  <tr>
+    <td>{{metric}}</td><td>{{operator}}</td><td>{{threshold}}</td>
+    <td>{{cooldown_minutes}}m</td>
+    <td class="hint">{{webhook_url}}</td><td class="hint">{{email_to}}</td>
+    <td>{{#enabled}}yes{{/enabled}}{{^enabled}}no{{/enabled}}</td>
+    <td class="del"><a class="del" hx-delete="/api/v1/sentry/alerts/{{id}}"
+        hx-swap="none" hx-confirm="Delete this rule?"
+        hx-on::after-request="onMutate()">delete</a></td>
+  </tr>
+  {{/rules}}
+  {{^rules}}<tr><td colspan="8" class="hint">no rules yet</td></tr>{{/rules}}
+</template>{% endraw %}
+
+<template id="eventsTpl">{% raw %}
+  {{#events}}
+  <tr><td>{{created_at}}</td><td>{{hostname}}</td><td>{{metric}}</td>
+    <td>{{operator}} {{threshold}}</td><td>{{observed}}</td>
+    <td class="hint">{{dispatch_status}}{{#dispatched_to}} → {{dispatched_to}}{{/dispatched_to}}</td></tr>
+  {{/events}}
+  {{^events}}<tr><td colspan="6" class="hint">no events</td></tr>{{/events}}
+</template>{% endraw %}
+
+<script>
+var COLORS = ['#4f8cff', '#35c98e', '#ffb454', '#e879f9', '#f87171',
+              '#38bdf8', '#a3e635', '#fb923c'];
+
+function creds() {
+  return {
+    token: localStorage.getItem('sentry_token') || '',
+    hwid: localStorage.getItem('sentry_hwid') || ''
+  };
+}
+
+document.body.addEventListener('htmx:configRequest', function (evt) {
+  var c = creds();
+  if (c.token) evt.detail.headers['Authorization'] = 'Bearer ' + c.token;
+  if (c.hwid) evt.detail.headers['X-Device-Hwid'] = c.hwid;
+});
+
+function connect() {
+  var token = document.getElementById('token-input').value.trim();
+  var hwid = document.getElementById('hwid-input').value.trim();
+  if (!token || !hwid) { alert('token and hwid are required'); return; }
+  localStorage.setItem('sentry_token', token);
+  localStorage.setItem('sentry_hwid', hwid);
+  document.getElementById('connect-banner').hidden = true;
+  htmx.trigger('#device-cards', 'load');
+  refreshCharts();
+  onMutate();
+}
+
+function disconnect() {
+  localStorage.removeItem('sentry_token');
+  localStorage.removeItem('sentry_hwid');
+  document.getElementById('tier-badge').textContent = 'no session';
+  document.getElementById('window-info').textContent = '';
+  document.getElementById('alerts-panel').hidden = true;
+  document.getElementById('connect-banner').hidden = false;
+  document.getElementById('device-cards').innerHTML =
+    '<span class="hint">waiting for session…</span>';
+}
+
+function onMutate() {
+  document.body.dispatchEvent(new Event('rules-changed'));
+}
+
+var charts = {};
+
+function refreshCharts() {
+  var c = creds();
+  if (!c.token) return;
+  fetch('/api/v1/sentry/dashboard', {
+    headers: { 'Authorization': 'Bearer ' + c.token,
+               'X-Device-Hwid': c.hwid }
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d.success) return;
+    var badge = document.getElementById('tier-badge');
+    badge.textContent = d.tier;
+    badge.className = 'badge ' + d.tier;
+    document.getElementById('window-info').textContent =
+      'history window: ' + d.history_window_hours + 'h · devices: ' +
+      d.devices.length + ' · samples: ' + d.metrics.length;
+    document.getElementById('alerts-panel').hidden = (d.tier !== 'pro');
+    draw('cpu-chart', d, 'cpu_usage', 'CPU %');
+    draw('ram-chart', d, 'ram_usage', 'RAM %');
+  }).catch(function () {});
+}
+
+function draw(id, data, field, label) {
+  var byHost = {};
+  data.metrics.forEach(function (m) {
+    (byHost[m.hwid_hash] = byHost[m.hwid_hash] || []).push(m);
+  });
+  var hosts = data.summary.filter(function (s) { return s.samples > 0; });
+  var datasets = hosts.map(function (s, i) {
+    var rows = byHost[s.hwid_hash] || [];
+    return {
+      label: s.hostname,
+      data: rows.map(function (r) { return r[field]; }),
+      borderColor: COLORS[i % COLORS.length],
+      backgroundColor: COLORS[i % COLORS.length] + '22',
+      pointRadius: 1, tension: .3
+    };
+  });
+  var labels = (byHost[hosts[0] && hosts[0].hwid_hash] || []).map(
+    function (r) { return r.recorded_at.slice(11, 16); });
+  if (!charts[id]) {
+    charts[id] = new Chart(document.getElementById(id), {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: { responsive: true, maintainAspectRatio: false,
+        animation: false, scales: { y: { min: 0, max: 100 } },
+        plugins: { legend: { labels: { color: '#e6ecf5' } } } }
+    });
+  } else {
+    charts[id].data.labels = labels;
+    charts[id].data.datasets = datasets;
+    charts[id].update();
+  }
+}
+
+if (creds().token) connect();
+setInterval(refreshCharts, 15000);
+</script>
+</body>
+</html>

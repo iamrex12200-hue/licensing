@@ -1,0 +1,4 @@
+lic.yourdomain.com {
+    reverse_proxy license:8000
+    encode gzip
+}
