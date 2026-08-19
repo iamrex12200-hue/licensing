@@ -103,6 +103,21 @@ namespace LicenseClient
             throw lastExc ?? new HttpRequestException("request failed");
         }
 
+        public async Task<bool> PingAsync()
+        {
+            for (int attempt = 1; attempt <= 4; attempt++)
+            {
+                if (attempt > 1) await Task.Delay(3000);
+                try
+                {
+                    using var resp = await _http.GetAsync("/healthz");
+                    if ((int)resp.StatusCode == 200) return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+
         public async Task<ActivationResponse> ActivateAsync(string licenseKey, string hwidHash)
         {
             var body = JsonContent.Create(new { key = licenseKey, hwid = hwidHash });

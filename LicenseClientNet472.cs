@@ -158,6 +158,23 @@ namespace LicenseClient
             }
         }
 
+        public async Task<bool> PingAsync()
+        {
+            for (int attempt = 1; attempt <= 4; attempt++)
+            {
+                if (attempt > 1) await Task.Delay(3000);
+                try
+                {
+                    using (var resp = await _http.GetAsync("/healthz"))
+                    {
+                        if ((int)resp.StatusCode == 200) return true;
+                    }
+                }
+                catch (Exception) { }
+            }
+            return false;
+        }
+
         private async Task<T> SendAsync<T>(HttpMethod method, string path,
                                            object body) where T : ApiResponseBase
         {

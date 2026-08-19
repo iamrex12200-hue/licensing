@@ -131,7 +131,8 @@ namespace LicenseManagerApp
             }
             _activateBtn.Enabled = false;
             _infoLabel.ForeColor = Color.Gray;
-            _infoLabel.Text = "Activating...";
+            _infoLabel.Text = "Connecting to licensing server... (this can take "
+                              + "a few seconds if the server was asleep)";
             try
             {
                 var resp = await _client.ActivateAsync(key, DeviceId);
@@ -159,7 +160,8 @@ namespace LicenseManagerApp
             catch (LicenseNetworkException exc)
             {
                 _infoLabel.ForeColor = Color.Firebrick;
-                _infoLabel.Text = "Network error: " + exc.Message;
+                _infoLabel.Text = "Could not reach the licensing server: "
+                                  + exc.Message + ". Please try again.";
             }
             finally
             {
@@ -374,6 +376,7 @@ namespace LicenseManagerApp
 
             BuildUi();
             _client.SetDeviceId(DeviceId);
+            _ = WarmUpServerAsync();
             _countdownTimer.Interval = 500;
             _countdownTimer.Tick += OnCountdownTick;
             _autoRefreshTimer.Interval = 5 * 60 * 1000;
@@ -499,14 +502,26 @@ namespace LicenseManagerApp
             }
         }
 
+        private async Task WarmUpServerAsync()
+        {
+            try
+            {
+                if (!File.Exists(_keyFile)) return;
+                SetStatus("Connecting to licensing server...");
+                await _client.PingAsync();
+            }
+            catch (Exception)
+            {
+            }
+        }
+
         private async Task OnStartupAsync()
         {
             if (!File.Exists(_keyFile))
             {
                 ShowActivationModal();
                 return;
-            }
-            _keyBox.Text = File.ReadAllText(_keyFile).Trim();
+            }            _keyBox.Text = File.ReadAllText(_keyFile).Trim();
             await ActivateAsync();
         }
 
@@ -547,7 +562,7 @@ namespace LicenseManagerApp
                 SetStatus("Enter a license key.");
                 return;
             }
-            SetBusy(true, "Activating...");
+            SetBusy(true, "Connecting to licensing server...");
             try
             {
                 var resp = await _client.ActivateAsync(key, DeviceId);
