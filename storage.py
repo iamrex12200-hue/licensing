@@ -68,6 +68,11 @@ def render_create_table(table, columns):
     return f"CREATE TABLE IF NOT EXISTS {table} ({defs})"
 
 
+def scalar(row):
+    """First column value from a row (works for sqlite Row and psycopg dict_row)."""
+    return row[0] if not isinstance(row, dict) else next(iter(row.values()))
+
+
 def last_id(cur):
     """Id of the most recently inserted row (dialect-aware)."""
     if DIALECT == "postgres":

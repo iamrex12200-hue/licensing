@@ -216,7 +216,8 @@ def rate_limit(bucket):
             "DELETE FROM rate_limits WHERE bucket=? AND ts<?"), (key, cutoff))
         count = conn.execute(storage.sql(
             "SELECT COUNT(*) FROM rate_limits WHERE bucket=?"), (key,)
-        ).fetchone()[0]
+        ).fetchone()
+        count = storage.scalar(count)
         if count >= limit:
             return window
         conn.execute(storage.sql(
@@ -761,7 +762,8 @@ def admin_metrics():
         return jsonify({"success": False, "error": "unauthorized"}), 401
     day_ago = now() - 86400
     with db() as conn:
-        count = lambda q, *p: conn.execute(storage.sql(q), p).fetchone()[0]
+        count = lambda q, *p: storage.scalar(
+            conn.execute(storage.sql(q), p).fetchone())
         licenses_total = count("SELECT COUNT(*) FROM licenses")
         licenses_active = count(
             "SELECT COUNT(*) FROM licenses WHERE status='active'"

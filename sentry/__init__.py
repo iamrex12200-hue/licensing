@@ -181,9 +181,9 @@ def build_sentry_blueprint(limited, require_feature, db_path, max_devices):
                 " DO UPDATE SET last_seen=CURRENT_TIMESTAMP,"
                 "               hostname=excluded.hostname"),
                 (key, hwid, hostname))
-            bound = conn.execute(storage.sql(
+            bound = storage.scalar(conn.execute(storage.sql(
                 "SELECT COUNT(*) FROM sentry_devices WHERE license_key=?"),
-                (key,)).fetchone()[0]
+                (key,)).fetchone())
         return jsonify({
             "success": True,
             "status": "registered",
@@ -222,11 +222,11 @@ def build_sentry_blueprint(limited, require_feature, db_path, max_devices):
                     "detail": "register the device via POST /api/v1/sentry/devices first",
                 }), 409
             if row["last_ingest_at"] is not None:
-                since = conn.execute(storage.sql(
+                since = storage.scalar(conn.execute(storage.sql(
                     f"SELECT CAST({storage.epoch_now()} AS INTEGER)"
                     f" - CAST({storage.epoch_seconds('last_ingest_at')} AS INTEGER)"
                     " FROM sentry_devices WHERE license_key=? AND hwid_hash=?"),
-                    (key, hwid)).fetchone()[0]
+                    (key, hwid)).fetchone())
                 if since < rules["min_interval_seconds"]:
                     wait = rules["min_interval_seconds"] - since
                     resp = jsonify({
