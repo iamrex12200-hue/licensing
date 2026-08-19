@@ -8,7 +8,8 @@ COPY templates/ /app/templates/
 COPY static/ /app/static/
 
 RUN pip install --no-cache-dir -r requirements.txt \
-    && useradd -r -u 10001 licuser && chown -R licuser /app
+    && useradd -r -u 10001 licuser && chown -R licuser /app \
+    && mkdir -p /var/data && chown licuser /var/data
 
 USER licuser
 
