@@ -422,7 +422,118 @@ public class Form1 : Form
 			: "[!] Endpoint unreachable - starting engine anyway; the "
 				+ "licensing handshake will retry automatically.",
 			ok ? Color.LimeGreen : Color.OrangeRed);
+		CheckAdbDevices();
 		StartEngine();
+	}
+
+	private static string[] AdbCandidates()
+	{
+		return new[]
+		{
+			"adb.exe",
+			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+				"Android", "Sdk", "platform-tools", "adb.exe"),
+			Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+				"AppData", "Local", "Android", "Sdk", "platform-tools", "adb.exe"),
+			@"C:\Android\platform-tools\adb.exe",
+			@"C:\Program Files (x86)\Android\android-sdk\platform-tools\adb.exe",
+			@"C:\Program Files\BlueStacks_nxt\HD-Adb.exe",
+			@"C:\LDPlayer\LDPlayer9\adb.exe"
+		};
+	}
+
+	private static string FindAdb()
+	{
+		foreach (string candidate in AdbCandidates())
+		{
+			try
+			{
+				if (File.Exists(candidate))
+				{
+					return candidate;
+				}
+			}
+			catch
+			{
+			}
+		}
+		return null;
+	}
+
+	private List<string> CheckAdbDevices()
+	{
+		var found = new List<string>();
+		string adb = FindAdb();
+		if (adb == null)
+		{
+			AppendLog("[!] adb not found on PATH or common SDK/emulator "
+				+ "folders. Install platform-tools and add adb to PATH.",
+				Color.OrangeRed);
+			return found;
+		}
+		try
+		{
+			var psi = new ProcessStartInfo
+			{
+				FileName = adb,
+				Arguments = "devices",
+				UseShellExecute = false,
+				CreateNoWindow = true,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			};
+			using (var proc = Process.Start(psi))
+			{
+				if (proc == null)
+				{
+					return found;
+				}
+				if (!proc.WaitForExit(6000))
+				{
+					try
+					{
+						proc.Kill();
+					}
+					catch
+					{
+					}
+					AppendLog("[!] adb devices timed out.", Color.OrangeRed);
+					return found;
+				}
+				string output = proc.StandardOutput.ReadToEnd();
+				foreach (string rawLine in output.Split('\n'))
+				{
+					string line = rawLine.Trim();
+					if (line.Length == 0
+						|| line.StartsWith("List of devices", StringComparison.OrdinalIgnoreCase)
+						|| line.StartsWith("*", StringComparison.OrdinalIgnoreCase))
+					{
+						continue;
+					}
+					string[] parts = line.Split('\t');
+					if (parts.Length >= 2 && parts[1].Trim() == "device")
+					{
+						found.Add(parts[0].Trim());
+					}
+				}
+			}
+			if (found.Count == 0)
+			{
+				AppendLog("[!] adb devices: no devices online. Connect an "
+					+ "Android device / start an emulator, or the engine will "
+					+ "idle-exit (code 5).", Color.OrangeRed);
+			}
+			else
+			{
+				AppendLog("[+] adb devices: " + string.Join(", ", found),
+					Color.LimeGreen);
+			}
+		}
+		catch (Exception exc)
+		{
+			AppendLog("[!] adb check failed: " + exc.Message, Color.OrangeRed);
+		}
+		return found;
 	}
 
 	private async Task<bool> PingEndpointAsync()
@@ -1184,6 +1295,27 @@ if (line.IndexOf("Initialization Failed", StringComparison.OrdinalIgnoreCase) >=
 			return;
 		}
 		_ipAnswer = text;
+		var devices = CheckAdbDevices();
+		if (devices.Count == 0)
+		{
+			DialogResult choice = MessageBox.Show(this,
+				"No Android device / emulator detected via adb. The engine will "
+				+ "idle-exit with code 5 and the bypass cannot attach.\n\n"
+				+ "Checklist:\n"
+				+ " - USB debugging enabled on the device (Developer Options)\n"
+				+ " - Authorize the RSA fingerprint on the device\n"
+				+ " - Emulator running with ADB enabled\n"
+				+ " - adb.exe reachable (PATH or common SDK folder)\n\n"
+				+ "Continue anyway?",
+				"ADB device check", MessageBoxButtons.YesNo,
+				MessageBoxIcon.Warning);
+			if (choice != DialogResult.Yes)
+			{
+				AppendLog("[*] Connect cancelled - no ADB device.",
+					Color.Gray);
+				return;
+			}
+		}
 		AppendLog("[*] Warming licensing endpoint before connect...", Color.Gray);
 		bool ok = await PingEndpointAsync();
 		if (!ok)
