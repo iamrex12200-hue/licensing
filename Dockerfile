@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY license_server.py sentry/ templates/ static/ requirements.txt ./
+COPY license_server.py storage.py sentry/ templates/ static/ requirements.txt ./
 
 RUN pip install --no-cache-dir -r requirements.txt \
     && useradd -r -u 10001 licuser && chown -R licuser /app
