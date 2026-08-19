@@ -74,9 +74,22 @@
   <button onclick="disconnect()">Disconnect</button>
 </header>
 <main>
+  <section id="whitelist-panel">
+    <h2>Whitelist a Game User ID</h2>
+    <div class="form-row">
+      <div><label class="hint">License key</label>
+        <input id="wl-key-input" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-X"></div>
+      <div><label class="hint">Game user ID (this ID gets whitelisted)</label>
+        <input id="wl-user-input" placeholder="e.g. EpicPlayer_999"></div>
+      <div><button class="primary" onclick="whitelistAndConnect()"
+          style="margin-top:18px">Whitelist &amp; Connect</button></div>
+    </div>
+  </section>
+
   <section id="connect-banner" class="hint" hidden>
-    Enter a token + device hwid above and click Connect. The token must belong
-    to a license whose device is bound to the given hwid.
+    Enter a token + device hwid above and click Connect, or whitelist a game
+    user ID with your license key above. The token must belong to a license
+    whose device is bound to the given hwid.
   </section>
 
   <section>
@@ -210,6 +223,53 @@ function connect() {
   htmx.trigger('#device-cards', 'load');
   refreshCharts();
   onMutate();
+}
+
+function sha256hex(text) {
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+    .then(function (buf) {
+      return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+        return ('0' + b.toString(16)).slice(-2);
+      }).join('');
+    });
+}
+
+function whitelistAndConnect() {
+  var key = document.getElementById('wl-key-input').value.trim();
+  var uid = document.getElementById('wl-user-input').value.trim();
+  var banner = document.getElementById('connect-banner');
+  if (!key || !uid) { alert('license key and game user ID are required'); return; }
+  banner.hidden = false;
+  banner.textContent = 'Whitelisting ' + uid + '...';
+  sha256hex(uid).then(function (hwid) {
+    return fetch('/api/v1/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: key, hwid: hwid })
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        return { status: r.status, data: d, hwid: hwid };
+      });
+    });
+  }).then(function (res) {
+    var data = res.data;
+    if (!data.success) {
+      banner.textContent = 'Whitelist failed: ' + (data.error || data.status
+        || 'unknown') + ' (HTTP ' + res.status + ').'
+        + (data.retry_after ? ' Retry in ' + data.retry_after + 's.' : '');
+      return;
+    }
+    localStorage.setItem('sentry_token', data.token);
+    localStorage.setItem('sentry_hwid', res.hwid);
+    document.getElementById('token-input').value = data.token;
+    document.getElementById('hwid-input').value = res.hwid;
+    banner.textContent = 'Whitelisted and connected as ' + uid + '.';
+    htmx.trigger('#device-cards', 'load');
+    refreshCharts();
+    onMutate();
+  }).catch(function (err) {
+    banner.textContent = 'Network error: ' + err.message;
+  });
 }
 
 function disconnect() {
