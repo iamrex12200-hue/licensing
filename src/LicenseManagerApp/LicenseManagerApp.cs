@@ -42,20 +42,31 @@ namespace LicenseManagerApp
         private readonly LicenseClient.LicenseClient _client;
         private readonly string _hwid;
         private readonly TextBox _keyBox = new TextBox();
+        private readonly TextBox _userIdBox = new TextBox();
         private readonly Label _infoLabel = new Label();
         private readonly Button _activateBtn = new Button();
         private readonly Button _cancelBtn = new Button();
 
         public string LicenseKey { get; private set; }
+        public string UserId => _userIdBox.Text.Trim();
+        public string DeviceId
+        {
+            get
+            {
+                var id = _userIdBox.Text.Trim();
+                return id.Length > 0 ? id : _hwid;
+            }
+        }
 
-        public ActivationDialog(LicenseClient.LicenseClient client, string hwid)
+        public ActivationDialog(LicenseClient.LicenseClient client, string hwid,
+                                string userId = null)
         {
             _client = client;
             _hwid = hwid;
 
             Text = "Activate License";
             Width = 420;
-            Height = 180;
+            Height = 200;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -64,33 +75,46 @@ namespace LicenseManagerApp
             _infoLabel.Text = "No license found on this device. Enter your key "
                               + "(XXXXX-XXXXX-XXXXX-XXXXX-X) to activate.";
             _infoLabel.Location = new Point(12, 12);
-            _infoLabel.Size = new Size(380, 40);
+            _infoLabel.Size = new Size(380, 34);
 
-            _keyBox.Location = new Point(12, 60);
+            var userIdLabel = new Label
+            {
+                Text = "Game user ID (optional):",
+                Location = new Point(12, 52),
+                AutoSize = true,
+                ForeColor = Color.Gray
+            };
+            _userIdBox.Location = new Point(130, 50);
+            _userIdBox.Width = 262;
+            _userIdBox.Text = userId ?? "";
+            _userIdBox.Font = new Font(Font.FontFamily, 10f);
+
+            _keyBox.Location = new Point(12, 80);
             _keyBox.Width = 380;
             _keyBox.Font = new Font(Font.FontFamily, 11f);
 
             _activateBtn.Text = "Activate";
-            _activateBtn.Location = new Point(12, 95);
+            _activateBtn.Location = new Point(12, 110);
             _activateBtn.Width = 110;
             _activateBtn.Click += async (s, e) => await ActivateAsync();
 
             _cancelBtn.Text = "Cancel";
-            _cancelBtn.Location = new Point(132, 95);
+            _cancelBtn.Location = new Point(132, 110);
             _cancelBtn.Width = 90;
             _cancelBtn.DialogResult = DialogResult.Cancel;
 
             var hint = new Label
             {
-                Text = "Network problems? Check the connection and try again.",
-                Location = new Point(12, 122),
+                Text = "Leave empty to whitelist this machine by HWID instead.",
+                Location = new Point(12, 137),
                 Size = new Size(380, 20),
                 ForeColor = Color.Gray
             };
 
             Controls.AddRange(new Control[]
             {
-                _infoLabel, _keyBox, _activateBtn, _cancelBtn, hint
+                _infoLabel, userIdLabel, _userIdBox, _keyBox,
+                _activateBtn, _cancelBtn, hint
             });
             AcceptButton = _activateBtn;
             CancelButton = _cancelBtn;
@@ -110,7 +134,7 @@ namespace LicenseManagerApp
             _infoLabel.Text = "Activating...";
             try
             {
-                var resp = await _client.ActivateAsync(key, _hwid);
+                var resp = await _client.ActivateAsync(key, DeviceId);
                 if (resp.StatusCode == 429)
                 {
                     var wait = resp.RetryAfterSeconds ?? 60;
@@ -161,15 +185,25 @@ namespace LicenseManagerApp
         private readonly string _currentKey;
         private readonly string _hwid;
         private readonly TextBox _keyBox = new TextBox();
+        private readonly TextBox _userIdBox = new TextBox();
         private readonly Label _infoLabel = new Label();
         private readonly Button _upgradeBtn = new Button();
         private readonly Button _cancelBtn = new Button();
 
         public string LicenseKey { get; private set; }
         public UpgradeResponse Result { get; private set; }
+        public string UserId => _userIdBox.Text.Trim();
+        public string DeviceId
+        {
+            get
+            {
+                var id = _userIdBox.Text.Trim();
+                return id.Length > 0 ? id : _hwid;
+            }
+        }
 
         public UpgradeDialog(LicenseClient.LicenseClient client,
-                             string currentKey, string hwid)
+                             string currentKey, string hwid, string userId = null)
         {
             _client = client;
             _currentKey = currentKey;
@@ -177,7 +211,7 @@ namespace LicenseManagerApp
 
             Text = "Upgrade License";
             Width = 420;
-            Height = 180;
+            Height = 200;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -186,33 +220,46 @@ namespace LicenseManagerApp
             _infoLabel.Text = "Enter your new license key. The current license "
                               + "will be replaced on this device.";
             _infoLabel.Location = new Point(12, 12);
-            _infoLabel.Size = new Size(380, 40);
+            _infoLabel.Size = new Size(380, 34);
 
-            _keyBox.Location = new Point(12, 60);
+            var userIdLabel = new Label
+            {
+                Text = "Game user ID (optional):",
+                Location = new Point(12, 52),
+                AutoSize = true,
+                ForeColor = Color.Gray
+            };
+            _userIdBox.Location = new Point(130, 50);
+            _userIdBox.Width = 262;
+            _userIdBox.Text = userId ?? "";
+            _userIdBox.Font = new Font(Font.FontFamily, 10f);
+
+            _keyBox.Location = new Point(12, 80);
             _keyBox.Width = 380;
             _keyBox.Font = new Font(Font.FontFamily, 11f);
 
             _upgradeBtn.Text = "Upgrade";
-            _upgradeBtn.Location = new Point(12, 95);
+            _upgradeBtn.Location = new Point(12, 110);
             _upgradeBtn.Width = 110;
             _upgradeBtn.Click += async (s, e) => await UpgradeAsync();
 
             _cancelBtn.Text = "Cancel";
-            _cancelBtn.Location = new Point(132, 95);
+            _cancelBtn.Location = new Point(132, 110);
             _cancelBtn.Width = 90;
             _cancelBtn.DialogResult = DialogResult.Cancel;
 
             var hint = new Label
             {
                 Text = "Your current session stays intact until the upgrade succeeds.",
-                Location = new Point(12, 122),
+                Location = new Point(12, 137),
                 Size = new Size(380, 20),
                 ForeColor = Color.Gray
             };
 
             Controls.AddRange(new Control[]
             {
-                _infoLabel, _keyBox, _upgradeBtn, _cancelBtn, hint
+                _infoLabel, userIdLabel, _userIdBox, _keyBox,
+                _upgradeBtn, _cancelBtn, hint
             });
             AcceptButton = _upgradeBtn;
             CancelButton = _cancelBtn;
@@ -238,7 +285,7 @@ namespace LicenseManagerApp
             _infoLabel.Text = "Upgrading...";
             try
             {
-                var resp = await _client.UpgradeAsync(_currentKey, key, _hwid);
+                var resp = await _client.UpgradeAsync(_currentKey, key, DeviceId);
                 if (resp.StatusCode == 429)
                 {
                     var wait = resp.RetryAfterSeconds ?? 60;
@@ -291,7 +338,11 @@ namespace LicenseManagerApp
         private readonly string _hwid;
         private readonly string _keyFile;
         private readonly string _endpointFile;
+        private readonly string _userIdFile;
+        private string _userId;
         private readonly TextBox _keyBox = new TextBox();
+        private readonly TextBox _userIdBox = new TextBox();
+        private readonly Label _deviceLabel = new Label();
         private readonly Button _activateBtn = new Button();
         private readonly Button _refreshBtn = new Button();
         private readonly Button _deactivateBtn = new Button();
@@ -317,6 +368,9 @@ namespace LicenseManagerApp
             _client = new LicenseClient.LicenseClient(endpoint);
             _hwid = HardwareIdentity.ComputeHwidHash();
             _keyFile = Path.Combine(configDir, "key.txt");
+            _userIdFile = Path.Combine(configDir, "userid.txt");
+            _userId = File.Exists(_userIdFile)
+                ? File.ReadAllText(_userIdFile).Trim() : "";
 
             BuildUi();
             _countdownTimer.Interval = 500;
@@ -326,11 +380,20 @@ namespace LicenseManagerApp
             Load += async (s, e) => await OnStartupAsync();
         }
 
+        private string DeviceId
+        {
+            get
+            {
+                var id = _userIdBox.Text.Trim();
+                return id.Length > 0 ? id : _hwid;
+            }
+        }
+
         private void BuildUi()
         {
             Text = "License Manager";
             Width = 460;
-            Height = 235;
+            Height = 265;
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
 
@@ -378,12 +441,22 @@ namespace LicenseManagerApp
             _featureBBtn.Click += async (s, e) =>
                 await LaunchFeatureAsync("/api/v1/data/advanced", "Feature B");
 
-            var hwidLabel = new Label
+            var userIdLabel = new Label
             {
-                Text = "Device: " + Environment.MachineName + "  (HWID "
-                       + _hwid.Substring(0, 12) + "...)",
-                Location = new Point(12, 118), AutoSize = true, ForeColor = Color.Gray
+                Text = "Game user ID:",
+                Location = new Point(12, 115),
+                AutoSize = true,
+                ForeColor = Color.Gray
             };
+            _userIdBox.Location = new Point(95, 112);
+            _userIdBox.Width = 255;
+            _userIdBox.Text = _userId;
+            _userIdBox.Leave += (s, e) => SaveUserId();
+
+            _deviceLabel.Location = new Point(12, 148);
+            _deviceLabel.AutoSize = true;
+            _deviceLabel.ForeColor = Color.Gray;
+            UpdateDeviceLabel();
 
             var statusStrip = new StatusStrip();
             statusStrip.Items.Add(_licenseStatus);
@@ -392,11 +465,36 @@ namespace LicenseManagerApp
             Controls.AddRange(new Control[]
             {
                 keyLabel, _keyBox, _activateBtn, _refreshBtn, _deactivateBtn,
-                _upgradeBtn, _featureABtn, _featureBBtn, hwidLabel, statusStrip
+                _upgradeBtn, _featureABtn, _featureBBtn, userIdLabel, _userIdBox,
+                _deviceLabel, statusStrip
             });
 
             SetStatus("Not activated - enter a key or press Activate.");
             UpdateFeatureButtons();
+        }
+
+        private void SaveUserId()
+        {
+            var id = _userIdBox.Text.Trim();
+            if (id == _userId) return;
+            _userId = id;
+            File.WriteAllText(_userIdFile, id);
+            UpdateDeviceLabel();
+        }
+
+        private void UpdateDeviceLabel()
+        {
+            if (_userIdBox.Text.Trim().Length > 0)
+            {
+                _deviceLabel.Text = "Device: " + Environment.MachineName
+                                    + "  (Game user ID: " + _userIdBox.Text.Trim()
+                                    + ")";
+            }
+            else
+            {
+                _deviceLabel.Text = "Device: " + Environment.MachineName + "  (HWID "
+                                    + _hwid.Substring(0, 12) + "...)";
+            }
         }
 
         private async Task OnStartupAsync()
@@ -416,10 +514,12 @@ namespace LicenseManagerApp
             _modalOpen = true;
             try
             {
-                using (var dialog = new ActivationDialog(_client, _hwid))
+                using (var dialog = new ActivationDialog(_client, DeviceId, _userId))
                 {
                     if (dialog.ShowDialog(this) == DialogResult.OK)
                     {
+                        _userIdBox.Text = dialog.UserId;
+                        SaveUserId();
                         _keyBox.Text = dialog.LicenseKey;
                         File.WriteAllText(_keyFile, dialog.LicenseKey);
                         SetStatus("Activated - checking server...");
@@ -448,7 +548,7 @@ namespace LicenseManagerApp
             SetBusy(true, "Activating...");
             try
             {
-                var resp = await _client.ActivateAsync(key, _hwid);
+                var resp = await _client.ActivateAsync(key, DeviceId);
                 if (resp.StatusCode == 429)
                 {
                     StartRateLimitCountdown(resp.RetryAfterSeconds ?? 60);
@@ -489,7 +589,7 @@ namespace LicenseManagerApp
             SetBusy(true, "Validating...");
             try
             {
-                var resp = await _client.ValidateAsync(_token, _hwid);
+                var resp = await _client.ValidateAsync(_token, DeviceId);
                 if (resp.StatusCode == 429)
                 {
                     StartRateLimitCountdown(resp.RetryAfterSeconds ?? 60);
@@ -591,9 +691,11 @@ namespace LicenseManagerApp
             }
             var currentKey = File.Exists(_keyFile)
                 ? File.ReadAllText(_keyFile).Trim() : _keyBox.Text.Trim();
-            using (var dialog = new UpgradeDialog(_client, currentKey, _hwid))
+            using (var dialog = new UpgradeDialog(_client, currentKey, DeviceId, _userId))
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                _userIdBox.Text = dialog.UserId;
+                SaveUserId();
                 ApplyUpgrade(dialog);
             }
         }
@@ -647,7 +749,7 @@ namespace LicenseManagerApp
                 ? File.ReadAllText(_keyFile).Trim() : _keyBox.Text.Trim();
             try
             {
-                await _client.DeactivateAsync(key, _hwid);
+                await _client.DeactivateAsync(key, DeviceId);
             }
             catch (LicenseNetworkException exc)
             {
