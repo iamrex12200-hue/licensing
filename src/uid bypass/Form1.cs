@@ -1175,7 +1175,7 @@ if (line.IndexOf("Initialization Failed", StringComparison.OrdinalIgnoreCase) >=
 		AppendLog("[*] Grant Emulator Access queued -> " + EmulatorLabel(), Color.Gray);
 	}
 
-	private void btnConnect_Click(object sender, EventArgs e)
+	private async void btnConnect_Click(object sender, EventArgs e)
 	{
 		string text = txtIp.Text.Trim();
 		if (text.Length > 0 && !IPAddress.TryParse(text, out var _))
@@ -1184,6 +1184,17 @@ if (line.IndexOf("Initialization Failed", StringComparison.OrdinalIgnoreCase) >=
 			return;
 		}
 		_ipAnswer = text;
+		AppendLog("[*] Warming licensing endpoint before connect...", Color.Gray);
+		bool ok = await PingEndpointAsync();
+		if (!ok)
+		{
+			AppendLog("[!] Endpoint unreachable - connect may fail with 0x2F7. "
+				+ "Check the server keepalive, then retry.", Color.OrangeRed);
+		}
+		else
+		{
+			AppendLog("[+] Endpoint ready - sending connect command.", Color.LimeGreen);
+		}
 		QueueMenuCommand("2");
 		AppendLog("[*] Connect Bypass queued" + ((text.Length == 0) ? " (default IP)" : (" (" + text + ")")), Color.Gray);
 	}
