@@ -412,6 +412,8 @@ public class Form1 : Form
 
 	private async Task BootEngineAsync()
 	{
+		_restartAttempts = 0;
+		_restartScheduled = false;
 		AppendLog("[*] Checking licensing endpoint " + LicensingEndpoint
 			+ " (TLS 1.2)...", Color.Gray);
 		bool ok = await PingEndpointAsync();
@@ -467,8 +469,6 @@ public class Form1 : Form
 	private void StartEngine()
 	{
 		StopEngine();
-		_restartAttempts = 0;
-		_restartScheduled = false;
 		string text = Path.Combine(Path.GetTempPath(), "uid_bypass_engine");
 		string text2 = Path.Combine(text, "UID_BYPASS.exe");
 		try
@@ -523,7 +523,13 @@ public class Form1 : Form
 					AppendLog("[!] Engine exited (exit code " + exitCode
 						+ ") after " + uptime.ToString("F1") + "s.", Color.OrangeRed);
 					SetEngineRunning(running: false);
-					if (uptime < 10.0)
+					if (exitCode == 5)
+					{
+						AppendLog("[*] Engine idle-timed out (no ADB device "
+							+ "connected). Connect a device and press RESTART "
+							+ "ENGINE.", Color.Gray);
+					}
+					else if (uptime < 10.0)
 					{
 						ScheduleAutoRestart("startup failure (exit code "
 							+ exitCode + ")");
