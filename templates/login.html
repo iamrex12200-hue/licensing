@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in &middot; Licensing Dashboard</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      background: #0b0e14; color: #e6e9f0;
+      font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    .card {
+      background: #141924; border: 1px solid #232b3b; border-radius: 12px;
+      padding: 32px 36px; width: 320px; box-shadow: 0 10px 40px rgba(0,0,0,.4);
+    }
+    .logo {
+      width: 40px; height: 40px; border-radius: 10px; margin-bottom: 14px;
+      background: linear-gradient(135deg, #4f8cff, #7a5cff);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 18px; color: #fff;
+    }
+    h1 { margin: 0 0 4px; font-size: 20px; }
+    p.sub { margin: 0 0 22px; color: #8b93a7; font-size: 13px; }
+    label { display: block; font-size: 12px; color: #8b93a7; margin: 0 0 6px; }
+    input {
+      box-sizing: border-box; width: 100%; padding: 10px 12px;
+      margin-bottom: 16px; border-radius: 8px; border: 1px solid #2a3346;
+      background: #0f1420; color: #e6e9f0; font-size: 14px; outline: none;
+    }
+    input:focus { border-color: #4f8cff; }
+    button {
+      width: 100%; padding: 11px; border: 0; border-radius: 8px;
+      background: linear-gradient(135deg, #4f8cff, #7a5cff);
+      color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    button:hover { filter: brightness(1.1); }
+    .error {
+      margin: 0 0 14px; padding: 9px 11px; border-radius: 8px;
+      background: rgba(255, 82, 82, .12); border: 1px solid rgba(255, 82, 82, .4);
+      color: #ff8b8b; font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">L</div>
+    <h1>Licensing Dashboard</h1>
+    <p class="sub">Sign in to view license devices and telemetry.</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="post" action="/sentry/login{% if request.args.get('next') %}?next={{ request.args.get('next') }}{% endif %}">
+      <label for="id">ID</label>
+      <input id="id" name="id" autocomplete="username" required autofocus>
+      <label for="pass">Password</label>
+      <input id="pass" name="pass" type="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</body>
+</html>

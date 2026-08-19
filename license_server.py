@@ -31,7 +31,8 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 
-from flask import Flask, g, jsonify, render_template, request
+from flask import (Flask, g, jsonify, redirect, render_template, request,
+                   session, url_for)
 
 import storage
 
@@ -99,6 +100,9 @@ def features_for(product):
     return PRODUCT_FEATURES.get(product, [])
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("LIC_SESSION_SECRET", HMAC_SECRET)
+LOGIN_USER = "rexy"
+LOGIN_PASSWORD = os.environ.get("LIC_LOGIN_PASSWORD", "rexy9033")
 
 
 def db():
@@ -319,9 +323,34 @@ sentry_bp, init_sentry_db = build_sentry_blueprint(
 app.register_blueprint(sentry_bp)
 
 
+@app.get("/sentry/login")
+def sentry_login_page():
+    if session.get("dash_user") == LOGIN_USER:
+        return redirect(url_for("sentry_dashboard_ui"))
+    return render_template("login.html", error=None)
+
+
+@app.post("/sentry/login")
+def sentry_login():
+    if (request.form.get("id") == LOGIN_USER
+            and request.form.get("pass") == LOGIN_PASSWORD):
+        session["dash_user"] = LOGIN_USER
+        nxt = request.args.get("next") or url_for("sentry_dashboard_ui")
+        return redirect(nxt)
+    return render_template("login.html",
+                           error="Invalid credentials"), 401
+
+
+@app.get("/sentry/logout")
+def sentry_logout():
+    session.pop("dash_user", None)
+    return redirect(url_for("sentry_login_page"))
+
+
 @app.get("/sentry/dashboard")
 def sentry_dashboard_ui():
-    """Zero-build operator UI (HTMX + Chart.js, vendored static assets)."""
+    if session.get("dash_user") != LOGIN_USER:
+        return redirect(url_for("sentry_login_page", next="/sentry/dashboard"))
     return render_template("dashboard.html")
 
 
