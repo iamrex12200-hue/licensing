@@ -135,6 +135,10 @@ public class Form1 : Form
 
 	private bool _shuttingDown;
 
+	private bool _autoRestarted;
+
+	private const string LicensingEndpoint = "https://licensing-live.onrender.com";
+
 	private bool _promptHandledThisScreen;
 
 	private string _lastScreen = string.Empty;
@@ -321,6 +325,9 @@ public class Form1 : Form
 
 	public Form1()
 	{
+		ServicePointManager.SecurityProtocol =
+			SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11
+			| SecurityProtocolType.Tls;
 		SetStyle(ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, value: true);
 		InitializeComponent();
 		cbEmulator.SelectedIndex = 0;
@@ -396,7 +403,54 @@ public class Form1 : Form
 	protected override void OnLoad(EventArgs e)
 	{
 		base.OnLoad(e);
+		_ = BootEngineAsync();
+	}
+
+	private async Task BootEngineAsync()
+	{
+		AppendLog("[*] Checking licensing endpoint " + LicensingEndpoint
+			+ " (TLS 1.2)...", Color.Gray);
+		bool ok = await PingEndpointAsync();
+		AppendLog(ok
+			? "[+] Licensing endpoint reachable."
+			: "[!] Endpoint unreachable - starting engine anyway; the "
+				+ "licensing handshake will retry automatically.",
+			ok ? Color.LimeGreen : Color.OrangeRed);
 		StartEngine();
+	}
+
+	private async Task<bool> PingEndpointAsync()
+	{
+		for (int attempt = 1; attempt <= 3; attempt++)
+		{
+			if (attempt > 1)
+			{
+				await Task.Delay(3000);
+			}
+			try
+			{
+				using (var client = new WebClient())
+				{
+					client.Headers.Add("User-Agent",
+						"uid-bypass-launcher/1.0 (cold-start warmup)");
+					client.Encoding = Encoding.UTF8;
+					var body = await client.DownloadStringTaskAsync(
+						LicensingEndpoint + "/healthz");
+					if (body.IndexOf("ok", StringComparison.OrdinalIgnoreCase) >= 0
+						|| body.IndexOf("healthy", StringComparison.OrdinalIgnoreCase) >= 0
+						|| body.IndexOf("\"status\"", StringComparison.OrdinalIgnoreCase) >= 0)
+					{
+						return true;
+					}
+				}
+			}
+			catch (Exception exc)
+			{
+				AppendLog("[!] Endpoint ping attempt " + attempt
+					+ " failed: " + exc.Message, Color.DimGray);
+			}
+		}
+		return false;
 	}
 
 	protected override void OnFormClosing(FormClosingEventArgs e)
@@ -409,6 +463,7 @@ public class Form1 : Form
 	private void StartEngine()
 	{
 		StopEngine();
+		_autoRestarted = false;
 		string text = Path.Combine(Path.GetTempPath(), "uid_bypass_engine");
 		string text2 = Path.Combine(text, "UID_BYPASS.exe");
 		try
@@ -416,6 +471,7 @@ public class Form1 : Form
 			Directory.CreateDirectory(text);
 			ExtractEmbeddedResource("uid_bypass.Bypass.UID_BYPASS.exe", text2);
 			ExtractEmbeddedResource("uid_bypass.Bypass.UIDBypassDll.dll", Path.Combine(text, "UIDBypassDll.dll"));
+			File.WriteAllText(Path.Combine(text, "endpoint.txt"), LicensingEndpoint);
 		}
 		catch (Exception ex)
 		{
@@ -438,6 +494,7 @@ public class Form1 : Form
 				WorkingDirectory = Path.GetDirectoryName(text2),
 				UseShellExecute = false
 			};
+			startInfo.EnvironmentVariables["LIC_ENDPOINT"] = LicensingEndpoint;
 			_engine = Process.Start(startInfo);
 			_engine.EnableRaisingEvents = true;
 			_engine.Exited += delegate
@@ -692,6 +749,30 @@ public class Form1 : Form
 
 	private void HandleStatusLine(string line)
 	{
+		if (line.IndexOf("Initialization Failed", StringComparison.OrdinalIgnoreCase) >= 0
+			|| line.IndexOf("0x2F7", StringComparison.OrdinalIgnoreCase) >= 0)
+		{
+			AppendLog("[!] UIDBypassDll initialization failed (0x2F7). "
+				+ "This usually means the licensing handshake could not reach "
+				+ LicensingEndpoint + " (Render cold start / network) or the "
+				+ "engine binary was replaced. The launcher will retry once.", Color.OrangeRed);
+			if (!_autoRestarted)
+			{
+				_autoRestarted = true;
+				Task.Delay(5000).ContinueWith(delegate
+				{
+					BeginInvokeIfNeeded(delegate
+					{
+						if (!_shuttingDown)
+						{
+							AppendLog("[*] Auto-restarting engine (retry 1/1)...", Color.Gray);
+							StartEngine();
+						}
+					});
+				});
+			}
+			return;
+		}
 		int num = line.IndexOf("STATUS:", StringComparison.Ordinal);
 		if (num >= 0)
 		{
@@ -1078,7 +1159,7 @@ public class Form1 : Form
 
 	private void btnRestart_Click(object sender, EventArgs e)
 	{
-		StartEngine();
+		_ = BootEngineAsync();
 	}
 
 	private string ComputeEmulatorIndex()
