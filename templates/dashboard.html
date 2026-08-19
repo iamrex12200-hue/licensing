@@ -64,6 +64,7 @@
 <header>
   <h1>Device Sentinel</h1>
   <span id="tier-badge" class="badge">no session</span>
+  <span id="session-info" class="hint" hidden></span>
   <span id="window-info" class="hint"></span>
   <span class="spacer"></span>
   <input id="token-input" type="password" placeholder="token" style="width:340px"
@@ -149,7 +150,9 @@
   {{#devices}}
   <div class="card">
     <div class="host"><span class="status-dot online"></span>{{#user_id}}{{user_id}}{{/user_id}}{{^user_id}}{{hostname}}{{/user_id}}</div>
-    <div class="meta">{{hostname}} · hwid {{hwid_hash}}<br>
+    <div class="meta">{{#user_id}}user_id: <b>{{user_id}}</b><br>{{/user_id}}
+      host: {{hostname}}<br>
+      hwid: {{hwid_hash}}<br>
       registered {{registered_at}} · last seen {{last_seen}}</div>
   </div>
   {{/devices}}
@@ -237,6 +240,12 @@ function refreshCharts() {
     var badge = document.getElementById('tier-badge');
     badge.textContent = d.tier;
     badge.className = 'badge ' + d.tier;
+    var si = document.getElementById('session-info');
+    if (d.devices && d.devices.length > 0) {
+      var first = d.devices[0];
+      si.textContent = 'connected as: ' + (first.user_id || first.hostname || first.hwid_hash);
+      si.hidden = false;
+    }
     document.getElementById('window-info').textContent =
       'history window: ' + d.history_window_hours + 'h · devices: ' +
       d.devices.length + ' · samples: ' + d.metrics.length;
