@@ -82,6 +82,19 @@ namespace LicenseClient
             return await resp.Content.ReadFromJsonAsync<ActivationResponse>();
         }
 
+        public async Task<ActivationResponse> RegisterDeviceAsync(string token, string hwidHash,
+                                                                  string hostname, string userId)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/sentry/devices")
+            {
+                Content = JsonContent.Create(new { hostname = hostname, user_id = userId })
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            req.Headers.Add("X-Device-Hwid", hwidHash);
+            var resp = await _http.SendAsync(req);
+            return await resp.Content.ReadFromJsonAsync<ActivationResponse>();
+        }
+
         public async Task<ValidationResponse> ValidateAsync(string token, string hwidHash)
         {
             var body = JsonContent.Create(new { token = token, hwid = hwidHash });

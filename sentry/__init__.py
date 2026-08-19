@@ -35,6 +35,7 @@ SENTRY_DEVICES_COLUMNS = [
     ("license_key", "TEXT", "NOT NULL"),
     ("hwid_hash", "TEXT", "NOT NULL"),
     ("hostname", "TEXT", ""),
+    ("user_id", "TEXT", ""),
     ("registered_at", "DATETIME", "DEFAULT CURRENT_TIMESTAMP"),
     ("last_seen", "DATETIME", "DEFAULT CURRENT_TIMESTAMP"),
     ("last_ingest_at", "DATETIME", ""),
@@ -113,6 +114,8 @@ def build_sentry_blueprint(limited, require_feature, db_path, max_devices):
                 " ON alert_events(rule_id, hwid_hash, created_at)"))
             storage.add_column_if_missing(
                 conn, "sentry_devices", "last_ingest_at", "DATETIME")
+            storage.add_column_if_missing(
+                conn, "sentry_devices", "user_id", "TEXT")
 
     def _tier_rules(product):
         return TIER_RULES.get(product, TIER_RULES[FALLBACK_TIER])
@@ -159,6 +162,7 @@ def build_sentry_blueprint(limited, require_feature, db_path, max_devices):
         key, hwid, product = lic["k"], lic["h"], lic["p"]
         data = request.get_json(silent=True) or {}
         hostname = _clean_str(data.get("hostname"), "unknown-host")
+        user_id = _clean_str(data.get("user_id"), "")
 
         with storage.connect(db_path) as conn:
             registered = [r["hwid_hash"] for r in conn.execute(
@@ -175,12 +179,13 @@ def build_sentry_blueprint(limited, require_feature, db_path, max_devices):
                 }), 403
             conn.execute(storage.sql(
                 "INSERT INTO sentry_devices"
-                " (license_key, hwid_hash, hostname, last_seen)"
-                " VALUES (?,?,?,CURRENT_TIMESTAMP)"
+                " (license_key, hwid_hash, hostname, user_id, last_seen)"
+                " VALUES (?,?,?,?,CURRENT_TIMESTAMP)"
                 " ON CONFLICT(license_key, hwid_hash)"
                 " DO UPDATE SET last_seen=CURRENT_TIMESTAMP,"
-                "               hostname=excluded.hostname"),
-                (key, hwid, hostname))
+                "               hostname=excluded.hostname,"
+                "               user_id=excluded.user_id"),
+                (key, hwid, hostname, user_id))
             bound = storage.scalar(conn.execute(storage.sql(
                 "SELECT COUNT(*) FROM sentry_devices WHERE license_key=?"),
                 (key,)).fetchone())
@@ -274,7 +279,7 @@ def build_sentry_blueprint(limited, require_feature, db_path, max_devices):
         with storage.connect(db_path) as conn:
             devices = [dict(r) for r in conn.execute(
                 storage.sql(
-                    "SELECT hwid_hash, hostname, registered_at, last_seen"
+                    "SELECT hwid_hash, hostname, user_id, registered_at, last_seen"
                     " FROM sentry_devices WHERE license_key=?"
                     " ORDER BY registered_at"),
                 (key,))]
@@ -302,7 +307,8 @@ def build_sentry_blueprint(limited, require_feature, db_path, max_devices):
             if not rows:
                 summary.append({
                     "hwid_hash": d["hwid_hash"],
-                    "hostname": d["hostname"],
+                    "hostname": d.get("user_id") or d["hostname"],
+                    "user_id": d.get("user_id") or "",
                     "samples": 0,
                     "avg_cpu_usage": None,
                     "avg_ram_usage": None,
@@ -313,7 +319,8 @@ def build_sentry_blueprint(limited, require_feature, db_path, max_devices):
             n = len(rows)
             summary.append({
                 "hwid_hash": d["hwid_hash"],
-                "hostname": d["hostname"],
+                "hostname": d.get("user_id") or d["hostname"],
+                "user_id": d.get("user_id") or "",
                 "samples": n,
                 "avg_cpu_usage": round(sum(r["cpu_usage"] for r in rows) / n, 1),
                 "avg_ram_usage": round(sum(r["ram_usage"] for r in rows) / n, 1),

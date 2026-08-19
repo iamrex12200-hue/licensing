@@ -148,8 +148,8 @@
 <template id="deviceCardsTpl">{% raw %}
   {{#devices}}
   <div class="card">
-    <div class="host"><span class="status-dot online"></span>{{hostname}}</div>
-    <div class="meta">hwid {{hwid_hash}}<br>
+    <div class="host"><span class="status-dot online"></span>{{#user_id}}{{user_id}}{{/user_id}}{{^user_id}}{{hostname}}{{/user_id}}</div>
+    <div class="meta">{{hostname}} · hwid {{hwid_hash}}<br>
       registered {{registered_at}} · last seen {{last_seen}}</div>
   </div>
   {{/devices}}

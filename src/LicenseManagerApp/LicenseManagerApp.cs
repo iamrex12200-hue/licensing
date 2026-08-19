@@ -560,6 +560,7 @@ namespace LicenseManagerApp
                     _client.SetToken(resp.Token);
                     File.WriteAllText(_keyFile, key);
                     _gate.Apply(resp.Product, resp.Features);
+                    RegisterDevice();
                     SetStatus("ACTIVATED: " + resp.Product + " - "
                               + DescribeExpiry(resp.ExpiresAt));
                     _refreshBtn.Enabled = true;
@@ -581,6 +582,25 @@ namespace LicenseManagerApp
             {
                 SetBusy(false, null);
             }
+        }
+
+        private async Task RegisterDeviceAsync()
+        {
+            if (_token == null) return;
+            try
+            {
+                await _client.RegisterDeviceAsync(Environment.MachineName, _userId);
+            }
+            catch (LicenseNetworkException)
+            {
+                // Non-critical: registration retries on next cycle; license stays valid.
+            }
+        }
+
+        private void RegisterDevice()
+        {
+            if (_token == null) return;
+            var _ = RegisterDeviceAsync();
         }
 
         private async Task RefreshAsync()
@@ -707,8 +727,8 @@ namespace LicenseManagerApp
             _token = dialog.Result.Token;
             _client.SetToken(_token);
             _gate.Apply(dialog.Result.Product, dialog.Result.Features);
-            SetStatus("UPGRADED: " + dialog.Result.Product + " - "
-                      + DescribeExpiry(dialog.Result.ExpiresAt));
+            RegisterDevice();
+            SetStatus("UPGRADED: " + dialog.Result.Product + " - "          + DescribeExpiry(dialog.Result.ExpiresAt));
             _refreshBtn.Enabled = true;
             _deactivateBtn.Enabled = true;
             _autoRefreshTimer.Start();

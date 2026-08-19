@@ -312,6 +312,15 @@ def collect_stats():
     }
 
 
+def read_user_id(cfg_dir):
+    """Optional game user id from user_id.txt (or env LIC_USER_ID_PATH)."""
+    user_id_path = Path(os.environ.get("LIC_USER_ID_PATH", cfg_dir / "user_id.txt"))
+    if user_id_path.exists():
+        value = user_id_path.read_text(encoding="utf-8").strip()
+        return value[:512] if value else ""
+    return ""
+
+
 def run_cycle(endpoint, cfg_dir, max_retries=5, backoff_base=2.0,
               backoff_cap=60.0, jitter=True):
     """One register + ingest pass. Returns (exit_code, retry_after_seconds)."""
@@ -323,10 +332,11 @@ def run_cycle(endpoint, cfg_dir, max_retries=5, backoff_base=2.0,
                "X-Device-Hwid": hwid,
                "Content-Type": "application/json"}
     stats = collect_stats()
+    user_id = read_user_id(cfg_dir)
 
     status, _, body = request_retry(
         "POST", f"{endpoint}/api/v1/sentry/devices", headers,
-        payload={"hostname": platform.node()},
+        payload={"hostname": platform.node(), "user_id": user_id},
         max_retries=max_retries, backoff_base=backoff_base,
         backoff_cap=backoff_cap, jitter=jitter)
     print(f"Device registration: HTTP {status} {body}")

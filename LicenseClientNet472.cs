@@ -201,12 +201,18 @@ namespace LicenseClient
                 new { key = licenseKey, hwid = hwidHash });
         }
 
-        public Task<UpgradeResponse> UpgradeAsync(string oldKey, string newKey,
-                                                  string hwidHash)
+public Task<UpgradeResponse> UpgradeAsync(string oldKey, string newKey,
+                                                   string hwidHash)
         {
             return PostAsync<UpgradeResponse>("/api/v1/upgrade",
                 new { key = newKey, hwid = hwidHash, old_key = oldKey,
                       current_token = Token });
+        }
+
+        public Task<ActivationResponse> RegisterDeviceAsync(string hostname, string userId)
+        {
+            return PostAsync<ActivationResponse>("/api/v1/sentry/devices",
+                new { hostname = hostname, user_id = userId });
         }
 
         public Task<AdminResponse> GenerateKeysAsync(string product, int days, int count = 1)
