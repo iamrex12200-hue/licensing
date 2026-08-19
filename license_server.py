@@ -717,6 +717,12 @@ def deactivate():
     return jsonify({"success": True, "status": "deactivated"})
 
 
+@app.get("/")
+def index():
+    return jsonify({"success": True, "status": "ok", "service": "licensing",
+                    "health": "/healthz", "dashboard": "/sentry/dashboard"}), 200
+
+
 @app.get("/healthz")
 def healthz():
     return jsonify({"success": True, "status": "ok"}), 200
