@@ -135,7 +135,11 @@ public class Form1 : Form
 
 	private bool _shuttingDown;
 
-	private bool _autoRestarted;
+	private int _restartAttempts;
+
+	private bool _restartScheduled;
+
+	private DateTime _engineStartedAt;
 
 	private const string LicensingEndpoint = "https://licensing-live.onrender.com";
 
@@ -463,7 +467,8 @@ public class Form1 : Form
 	private void StartEngine()
 	{
 		StopEngine();
-		_autoRestarted = false;
+		_restartAttempts = 0;
+		_restartScheduled = false;
 		string text = Path.Combine(Path.GetTempPath(), "uid_bypass_engine");
 		string text2 = Path.Combine(text, "UID_BYPASS.exe");
 		try
@@ -497,16 +502,38 @@ public class Form1 : Form
 			startInfo.EnvironmentVariables["LIC_ENDPOINT"] = LicensingEndpoint;
 			_engine = Process.Start(startInfo);
 			_engine.EnableRaisingEvents = true;
+			_engineStartedAt = DateTime.UtcNow;
 			_engine.Exited += delegate
 			{
-				if (!_shuttingDown)
+				if (_shuttingDown)
 				{
-					BeginInvokeIfNeeded(delegate
-					{
-						AppendLog("[!] Engine exited. Click 'Restart Engine' to bring it back.", Color.OrangeRed);
-						SetEngineRunning(running: false);
-					});
+					return;
 				}
+				int exitCode = 0;
+				try
+				{
+					exitCode = _engine.ExitCode;
+				}
+				catch
+				{
+				}
+				double uptime = (DateTime.UtcNow - _engineStartedAt).TotalSeconds;
+				BeginInvokeIfNeeded(delegate
+				{
+					AppendLog("[!] Engine exited (exit code " + exitCode
+						+ ") after " + uptime.ToString("F1") + "s.", Color.OrangeRed);
+					SetEngineRunning(running: false);
+					if (uptime < 10.0)
+					{
+						ScheduleAutoRestart("startup failure (exit code "
+							+ exitCode + ")");
+					}
+					else
+					{
+						AppendLog("[*] Engine ran normally and stopped. "
+							+ "Press RESTART ENGINE to relaunch.", Color.Gray);
+					}
+				});
 			};
 			_lastScreen = string.Empty;
 			_partialLine = string.Empty;
@@ -525,6 +552,37 @@ public class Form1 : Form
 			AppendLog("[!] Failed to start engine: " + ex2.Message, Color.OrangeRed);
 			SetEngineRunning(running: false);
 		}
+	}
+
+	private void ScheduleAutoRestart(string reason)
+	{
+		if (_restartScheduled)
+		{
+			return;
+		}
+		_restartScheduled = true;
+		if (_restartAttempts >= 3)
+		{
+			AppendLog("[!] Auto-restart exhausted after " + _restartAttempts
+				+ " attempts (" + reason + "). Check " + _logPath
+				+ " and your network, then press RESTART ENGINE.", Color.OrangeRed);
+			return;
+		}
+		_restartAttempts++;
+		int delay = 5 * _restartAttempts;
+		AppendLog("[*] Auto-restart " + _restartAttempts
+			+ "/3 in " + delay + "s (" + reason + ")...", Color.Gray);
+		Task.Delay(TimeSpan.FromSeconds(delay)).ContinueWith(delegate
+		{
+			BeginInvokeIfNeeded(delegate
+			{
+				if (!_shuttingDown)
+				{
+					_restartScheduled = false;
+					StartEngine();
+				}
+			});
+		});
 	}
 
 	private void StopEngine()
@@ -749,28 +807,13 @@ public class Form1 : Form
 
 	private void HandleStatusLine(string line)
 	{
-		if (line.IndexOf("Initialization Failed", StringComparison.OrdinalIgnoreCase) >= 0
+if (line.IndexOf("Initialization Failed", StringComparison.OrdinalIgnoreCase) >= 0
 			|| line.IndexOf("0x2F7", StringComparison.OrdinalIgnoreCase) >= 0)
 		{
 			AppendLog("[!] UIDBypassDll initialization failed (0x2F7). "
-				+ "This usually means the licensing handshake could not reach "
-				+ LicensingEndpoint + " (Render cold start / network) or the "
-				+ "engine binary was replaced. The launcher will retry once.", Color.OrangeRed);
-			if (!_autoRestarted)
-			{
-				_autoRestarted = true;
-				Task.Delay(5000).ContinueWith(delegate
-				{
-					BeginInvokeIfNeeded(delegate
-					{
-						if (!_shuttingDown)
-						{
-							AppendLog("[*] Auto-restarting engine (retry 1/1)...", Color.Gray);
-							StartEngine();
-						}
-					});
-				});
-			}
+				+ "The licensing handshake could not complete - see "
+				+ _logPath + " for details.", Color.OrangeRed);
+			ScheduleAutoRestart("UIDBypassDll initialization failed (0x2F7)");
 			return;
 		}
 		int num = line.IndexOf("STATUS:", StringComparison.Ordinal);
