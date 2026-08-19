@@ -313,7 +313,7 @@ namespace LicenseManagerApp
             _endpointFile = Path.Combine(configDir, "endpoint.txt");
             var endpoint = File.Exists(_endpointFile)
                 ? File.ReadAllText(_endpointFile).Trim()
-                : "https://licensing.onrender.com";
+                : "https://licensing-live.onrender.com";
             _client = new LicenseClient.LicenseClient(endpoint);
             _hwid = HardwareIdentity.ComputeHwidHash();
             _keyFile = Path.Combine(configDir, "key.txt");
